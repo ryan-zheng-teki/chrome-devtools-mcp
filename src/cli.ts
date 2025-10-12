@@ -54,6 +54,11 @@ export const cliOptions = {
     describe:
       'Path to a file to write debug logs to. Set the env variable `DEBUG` to `*` to enable verbose logs. Useful for submitting bug reports.',
   },
+  disableTimeouts: {
+    type: 'boolean' as const,
+    description: 'Disable Puppeteer timeouts for actions and navigations.',
+    default: false,
+  },
 };
 
 export function parseArguments(version: string, argv = process.argv) {

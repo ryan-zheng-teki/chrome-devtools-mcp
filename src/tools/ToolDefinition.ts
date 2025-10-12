@@ -75,6 +75,7 @@ export type Context = Readonly<{
     mimeType: 'image/png' | 'image/jpeg',
   ): Promise<{filename: string}>;
   waitForEventsAfterAction(action: () => Promise<unknown>): Promise<void>;
+  areTimeoutsDisabled(): boolean;
 }>;
 
 export function defineTool<Schema extends z.ZodRawShape>(

@@ -219,6 +219,11 @@ The Chrome DevTools MCP server supports the following configuration option:
   Path to a file to write debug logs to. Set the env variable `DEBUG` to `*` to enable verbose logs. Useful for submitting bug reports.
   - **Type:** string
 
+- **`--disableTimeouts`**
+  Disable Puppeteer timeouts for actions and navigations.
+  - **Type:** boolean
+  - **Default:** `false`
+
 <!-- END AUTO GENERATED OPTIONS -->
 
 Pass them via the `args` property in the JSON configuration. For example:
@@ -232,7 +237,8 @@ Pass them via the `args` property in the JSON configuration. For example:
         "chrome-devtools-mcp@latest",
         "--channel=canary",
         "--headless=true",
-        "--isolated=true"
+        "--isolated=true",
+        "--disableTimeouts=true"
       ]
     }
   }

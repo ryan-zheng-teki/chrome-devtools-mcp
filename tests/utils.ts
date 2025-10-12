@@ -16,9 +16,9 @@ let browser: Browser | undefined;
 
 export async function withBrowser(
   cb: (response: McpResponse, context: McpContext) => Promise<void>,
-  options: {debug?: boolean} = {},
+  options: {debug?: boolean; disableTimeouts?: boolean} = {},
 ) {
-  const {debug = false} = options;
+  const {debug = false, disableTimeouts = false} = options;
   if (!browser) {
     browser = await puppeteer.launch({
       executablePath: process.env.PUPPETEER_EXECUTABLE_PATH,
@@ -36,7 +36,9 @@ export async function withBrowser(
     }),
   );
   const response = new McpResponse();
-  const context = await McpContext.from(browser, logger('test'));
+  const context = await McpContext.from(browser, logger('test'), {
+    disableTimeouts,
+  });
 
   await cb(response, context);
 }

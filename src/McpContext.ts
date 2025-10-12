@@ -26,6 +26,10 @@ import type {Context} from './tools/ToolDefinition.js';
 import type {TraceResult} from './trace-processing/parse.js';
 import {WaitForHelper} from './WaitForHelper.js';
 
+export interface McpContextOptions {
+  disableTimeouts?: boolean;
+}
+
 export interface TextSnapshotNode extends SerializedAXNode {
   id: string;
   children: TextSnapshotNode[];
@@ -77,9 +81,16 @@ export class McpContext implements Context {
   #nextSnapshotId = 1;
   #traceResults: TraceResult[] = [];
 
-  private constructor(browser: Browser, logger: Debugger) {
+  #timeoutsDisabled: boolean;
+
+  private constructor(
+    browser: Browser,
+    logger: Debugger,
+    options: McpContextOptions = {},
+  ) {
     this.browser = browser;
     this.logger = logger;
+    this.#timeoutsDisabled = options.disableTimeouts ?? false;
 
     this.#networkCollector = new NetworkCollector(
       this.browser,
@@ -110,8 +121,12 @@ export class McpContext implements Context {
     await this.#consoleCollector.init();
   }
 
-  static async from(browser: Browser, logger: Debugger) {
-    const context = new McpContext(browser, logger);
+  static async from(
+    browser: Browser,
+    logger: Debugger,
+    options: McpContextOptions = {},
+  ) {
+    const context = new McpContext(browser, logger, options);
     await context.#init();
     return context;
   }
@@ -184,6 +199,10 @@ export class McpContext implements Context {
     return this.#cpuThrottlingRateMap.get(page) ?? 1;
   }
 
+  areTimeoutsDisabled(): boolean {
+    return this.#timeoutsDisabled;
+  }
+
   setIsRunningPerformanceTrace(x: boolean): void {
     this.#isRunningTrace = x;
   }
@@ -241,6 +260,11 @@ export class McpContext implements Context {
 
   #updateSelectedPageTimeouts() {
     const page = this.getSelectedPage();
+    if (this.#timeoutsDisabled) {
+      page.setDefaultTimeout(0);
+      page.setDefaultNavigationTimeout(0);
+      return;
+    }
     // For waiters 5sec timeout should be sufficient.
     // Increased in case we throttle the CPU
     const cpuMultiplier = this.getCpuThrottlingRate();
@@ -366,7 +390,9 @@ export class McpContext implements Context {
     cpuMultiplier: number,
     networkMultiplier: number,
   ) {
-    return new WaitForHelper(page, cpuMultiplier, networkMultiplier);
+    return new WaitForHelper(page, cpuMultiplier, networkMultiplier, {
+      disableTimeouts: this.#timeoutsDisabled,
+    });
   }
 
   waitForEventsAfterAction(action: () => Promise<unknown>): Promise<void> {

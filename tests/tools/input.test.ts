@@ -8,6 +8,9 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import {describe, it} from 'node:test';
 
+import sinon from 'sinon';
+import type {FileChooser} from 'puppeteer';
+
 import {
   click,
   hover,
@@ -367,6 +370,55 @@ describe('input', () => {
 
         await fs.unlink(testFilePath);
       });
+    });
+
+    it('waits for a file chooser without timeout when timeouts are disabled', async () => {
+      const testFilePath = path.join(process.cwd(), 'test.txt');
+      await fs.writeFile(testFilePath, 'test file content');
+
+      await withBrowser(
+        async (response, context) => {
+          const page = context.getSelectedPage();
+          await page.setContent(`<!DOCTYPE html>
+<button id="file-chooser-button">Upload file</button>
+<input type="file" id="file-input" style="display: none;">
+<script>
+  document.getElementById('file-chooser-button').addEventListener('click', () => {
+    document.getElementById('file-input').click();
+  });
+</script>`);
+          await context.createTextSnapshot();
+
+          let waitForTimeout: number | undefined;
+          const waitForFileChooserStub = sinon
+            .stub(page, 'waitForFileChooser')
+            .callsFake(async options => {
+              waitForTimeout = options?.timeout;
+              return {
+                accept: async () => {},
+              } as unknown as FileChooser;
+            });
+          try {
+            await uploadFile.handler(
+              {
+                params: {
+                  uid: '1_1',
+                  filePath: testFilePath,
+                },
+              },
+              response,
+              context,
+            );
+            sinon.assert.calledOnce(waitForFileChooserStub);
+            assert.strictEqual(waitForTimeout, 0);
+          } finally {
+            waitForFileChooserStub.restore();
+          }
+        },
+        {disableTimeouts: true},
+      );
+
+      await fs.unlink(testFilePath);
     });
 
     it('throws an error if the element is not a file input and does not open a file chooser', async () => {

@@ -198,8 +198,9 @@ export const uploadFile = defineTool({
         // Page.waitForFileChooser() and upload the file this way.
         try {
           const page = await context.getSelectedPage();
+          const fileChooserTimeout = context.areTimeoutsDisabled() ? 0 : 3000;
           const [fileChooser] = await Promise.all([
-            page.waitForFileChooser({timeout: 3000}),
+            page.waitForFileChooser({timeout: fileChooserTimeout}),
             handle.asLocator().click(),
           ]);
           await fileChooser.accept([filePath]);

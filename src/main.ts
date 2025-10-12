@@ -77,7 +77,9 @@ async function getContext(): Promise<McpContext> {
     logFile,
   });
   if (context?.browser !== browser) {
-    context = await McpContext.from(browser, logger);
+    context = await McpContext.from(browser, logger, {
+      disableTimeouts: args.disableTimeouts,
+    });
   }
   return context;
 }

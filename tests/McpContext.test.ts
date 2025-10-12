@@ -78,4 +78,19 @@ describe('McpContext', () => {
       sinon.assert.calledWithExactly(stub, page, 2, 10);
     });
   });
+
+  it('disables puppeteer timeouts when configured', async () => {
+    await withBrowser(async (_response, context) => {
+      const page = context.getSelectedPage();
+
+      assert.strictEqual(page.getDefaultTimeout(), 0);
+      assert.strictEqual(page.getDefaultNavigationTimeout(), 0);
+
+      context.setCpuThrottlingRate(3);
+      assert.strictEqual(page.getDefaultTimeout(), 0);
+
+      context.setNetworkConditions('Slow 3G');
+      assert.strictEqual(page.getDefaultNavigationTimeout(), 0);
+    }, {disableTimeouts: true});
+  });
 });

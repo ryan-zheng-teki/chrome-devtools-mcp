@@ -15,17 +15,20 @@ export class WaitForHelper {
   #stableDomFor: number;
   #expectNavigationIn: number;
   #navigationTimeout: number;
+  #timeoutsDisabled: boolean;
 
   constructor(
     page: Page,
     cpuTimeoutMultiplier: number,
     networkTimeoutMultiplier: number,
+    options: {disableTimeouts?: boolean} = {},
   ) {
     this.#stableDomTimeout = 3000 * cpuTimeoutMultiplier;
     this.#stableDomFor = 100 * cpuTimeoutMultiplier;
     this.#expectNavigationIn = 100 * cpuTimeoutMultiplier;
     this.#navigationTimeout = 3000 * networkTimeoutMultiplier;
     this.#page = page as unknown as CdpPage;
+    this.#timeoutsDisabled = options.disableTimeouts ?? false;
   }
 
   /**
@@ -72,10 +75,16 @@ export class WaitForHelper {
       }
     });
 
-    return Promise.race([
-      stableDomObserver.evaluate(async observer => {
-        return await observer.resolver.promise;
-      }),
+    const waitForDom = stableDomObserver.evaluate(async observer => {
+      return await observer.resolver.promise;
+    });
+
+    if (this.#timeoutsDisabled) {
+      return await waitForDom;
+    }
+
+    return await Promise.race([
+      waitForDom,
       this.timeout(this.#stableDomTimeout).then(() => {
         throw new Error('Timeout');
       }),
@@ -108,6 +117,10 @@ export class WaitForHelper {
       });
     });
 
+    if (this.#timeoutsDisabled) {
+      return await navigationStartedPromise;
+    }
+
     return await Promise.race([
       navigationStartedPromise,
       this.timeout(this.#expectNavigationIn).then(() => false),
@@ -131,7 +144,7 @@ export class WaitForHelper {
       .then(navigationStated => {
         if (navigationStated) {
           return this.#page.waitForNavigation({
-            timeout: this.#navigationTimeout,
+            timeout: this.#timeoutsDisabled ? 0 : this.#navigationTimeout,
             signal: this.#abortController.signal,
           });
         }
