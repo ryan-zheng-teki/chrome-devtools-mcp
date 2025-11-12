@@ -31,7 +31,16 @@ import {WaitForHelper} from './WaitForHelper.js';
 
 export interface McpContextOptions {
   disableTimeouts?: boolean;
+  // Whether the DevTools windows are exposed as pages for debugging of DevTools.
+  experimentalDevToolsDebugging?: boolean;
+  // Whether all page-like targets are exposed as pages.
+  experimentalIncludeAllPages?: boolean;
 }
+
+type InternalMcpContextOptions = {
+  experimentalDevToolsDebugging: boolean;
+  experimentalIncludeAllPages: boolean;
+};
 
 export interface TextSnapshotNode extends SerializedAXNode {
   id: string;
@@ -46,15 +55,12 @@ export interface TextSnapshot {
   selectedElementUid?: string;
 }
 
-interface McpContextOptions {
-  // Whether the DevTools windows are exposed as pages for debugging of DevTools.
-  experimentalDevToolsDebugging: boolean;
-  // Whether all page-like targets are exposed as pages.
-  experimentalIncludeAllPages?: boolean;
-}
-
 const DEFAULT_TIMEOUT = 5_000;
 const NAVIGATION_TIMEOUT = 10_000;
+const DEFAULT_CONTEXT_OPTIONS: InternalMcpContextOptions = {
+  experimentalDevToolsDebugging: false,
+  experimentalIncludeAllPages: false,
+};
 
 function getNetworkMultiplierFromString(condition: string | null): number {
   const puppeteerCondition =
@@ -107,7 +113,7 @@ export class McpContext implements Context {
   #traceResults: TraceResult[] = [];
 
   #locatorClass: typeof Locator;
-  #options: McpContextOptions;
+  #options: InternalMcpContextOptions;
   #timeoutsDisabled: boolean;
 
   private constructor(
@@ -119,7 +125,14 @@ export class McpContext implements Context {
     this.browser = browser;
     this.logger = logger;
     this.#locatorClass = locatorClass;
-    this.#options = options;
+    this.#options = {
+      experimentalDevToolsDebugging:
+        options.experimentalDevToolsDebugging ??
+        DEFAULT_CONTEXT_OPTIONS.experimentalDevToolsDebugging,
+      experimentalIncludeAllPages:
+        options.experimentalIncludeAllPages ??
+        DEFAULT_CONTEXT_OPTIONS.experimentalIncludeAllPages,
+    };
     this.#timeoutsDisabled = options.disableTimeouts ?? false;
 
     this.#networkCollector = new NetworkCollector(

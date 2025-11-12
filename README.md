@@ -63,6 +63,56 @@ amp mcp add chrome-devtools -- npx chrome-devtools-mcp@latest
 
 </details>
 
+### Developing from source (using your own changes)
+
+If you are working on a fork or local branch instead of the published
+`chrome-devtools-mcp@latest` package, you do need to build the project once and
+point your MCP client at the compiled entry point. A global install is **not**
+required.
+
+1. Clone your fork and install dependencies:
+   ```bash
+   git clone <your-fork-url>
+   cd chrome-devtools-mcp
+   npm ci
+   ```
+2. Build (and bundle) the TypeScript sources so runtime dependencies are inlined:
+   ```bash
+   npm run bundle
+   ```
+   `npm run bundle` runs `clean`, `build`, and the Rollup bundler, producing the
+   `build/src/index.js` entry point plus a bundled `build/src/third_party` that
+   no longer depends on your local `node_modules` at runtime.
+3. (Optional) Install your build globally if you prefer to invoke it anywhere:
+   ```bash
+   npm pack  # produces chrome-devtools-mcp-<version>.tgz
+   npm install -g ./chrome-devtools-mcp-<version>.tgz
+   ```
+   After a global install you can run `chrome-devtools-mcp` directly or point
+   MCP clients to `npx chrome-devtools-mcp` without publishing to npm. Re-run
+   `npm run bundle`, `npm pack`, and reinstall whenever you change the sources.
+   You can also do everything in one shot:
+   ```bash
+   npm ci && npm run bundle && npm pack && npm install -g "./chrome-devtools-mcp-$(node -p "require('./package.json').version").tgz"
+   ```
+4. Update your MCP client configuration to call the local build instead of
+   `npx -y chrome-devtools-mcp@latest`. For example:
+   ```json
+   {
+     "mcpServers": {
+       "chrome-devtools": {
+         "command": "node",
+         "args": ["/absolute/path/to/build/src/index.js"]
+       }
+     }
+   }
+   ```
+
+Re-run `npm run build` whenever you change the source code. You can also use
+`npm run start` (which builds and runs the server) or `npx
+@modelcontextprotocol/inspector node build/src/index.js` for local testing. For
+more contributor-specific details, see `CONTRIBUTING.md`.
+
 <details>
   <summary>Claude Code</summary>
     Use the Claude Code CLI to add the Chrome DevTools MCP server (<a href="https://docs.anthropic.com/en/docs/claude-code/mcp">guide</a>):
