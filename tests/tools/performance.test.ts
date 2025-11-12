@@ -158,6 +158,7 @@ describe('performance', () => {
         await analyzeInsight.handler(
           {
             params: {
+              insightSetId: 'NAVIGATION_0',
               insightName: 'LCPBreakdown',
             },
           },
@@ -178,6 +179,7 @@ describe('performance', () => {
         await analyzeInsight.handler(
           {
             params: {
+              insightSetId: '8463DF94CD61B265B664E7F768183DE3',
               insightName: 'MadeUpInsightName',
             },
           },
@@ -187,7 +189,7 @@ describe('performance', () => {
         assert.ok(
           response.responseLines
             .join('\n')
-            .match(/No Insight with the name MadeUpInsightName found./),
+            .match(/No Performance Insights for the given insight set id/),
         );
       });
     });
@@ -197,6 +199,7 @@ describe('performance', () => {
         await analyzeInsight.handler(
           {
             params: {
+              insightSetId: '8463DF94CD61B265B664E7F768183DE3',
               insightName: 'LCPBreakdown',
             },
           },
@@ -218,7 +221,11 @@ describe('performance', () => {
     it('does nothing if the trace is not running and does not error', async () => {
       await withBrowser(async (response, context) => {
         context.setIsRunningPerformanceTrace(false);
+        const selectedPage = context.getSelectedPage();
+        const stopTracingStub = sinon.stub(selectedPage.tracing, 'stop');
         await stopTrace.handler({params: {}}, response, context);
+        sinon.assert.notCalled(stopTracingStub);
+        assert.strictEqual(context.isRunningPerformanceTrace(), false);
       });
     });
 

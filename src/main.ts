@@ -4,22 +4,22 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import assert from 'node:assert';
-import fs from 'node:fs';
-import path from 'node:path';
-
-import {McpServer} from '@modelcontextprotocol/sdk/server/mcp.js';
-import {StdioServerTransport} from '@modelcontextprotocol/sdk/server/stdio.js';
-import type {CallToolResult} from '@modelcontextprotocol/sdk/types.js';
-import {SetLevelRequestSchema} from '@modelcontextprotocol/sdk/types.js';
+import './polyfill.js';
 
 import type {Channel} from './browser.js';
-import {resolveBrowser} from './browser.js';
+import {ensureBrowserConnected, ensureBrowserLaunched} from './browser.js';
 import {parseArguments} from './cli.js';
 import {logger, saveLogsToFile} from './logger.js';
 import {McpContext} from './McpContext.js';
 import {McpResponse} from './McpResponse.js';
 import {Mutex} from './Mutex.js';
+import {
+  McpServer,
+  StdioServerTransport,
+  type CallToolResult,
+  SetLevelRequestSchema,
+} from './third_party/index.js';
+import {ToolCategory} from './tools/categories.js';
 import * as consoleTools from './tools/console.js';
 import * as emulationTools from './tools/emulation.js';
 import * as inputTools from './tools/input.js';
@@ -31,33 +31,21 @@ import * as scriptTools from './tools/script.js';
 import * as snapshotTools from './tools/snapshot.js';
 import type {ToolDefinition} from './tools/ToolDefinition.js';
 
-function readPackageJson(): {version?: string} {
-  const currentDir = import.meta.dirname;
-  const packageJsonPath = path.join(currentDir, '..', '..', 'package.json');
-  if (!fs.existsSync(packageJsonPath)) {
-    return {};
-  }
-  try {
-    const json = JSON.parse(fs.readFileSync(packageJsonPath, 'utf-8'));
-    assert.strict(json['name'], 'chrome-devtools-mcp');
-    return json;
-  } catch {
-    return {};
-  }
-}
+// If moved update release-please config
+// x-release-please-start-version
+const VERSION = '0.10.1';
+// x-release-please-end
 
-const version = readPackageJson().version ?? 'unknown';
-
-export const args = parseArguments(version);
+export const args = parseArguments(VERSION);
 
 const logFile = args.logFile ? saveLogsToFile(args.logFile) : undefined;
 
-logger(`Starting Chrome DevTools MCP Server v${version}`);
+logger(`Starting Chrome DevTools MCP Server v${VERSION}`);
 const server = new McpServer(
   {
     name: 'chrome_devtools',
     title: 'Chrome DevTools MCP server',
-    version,
+    version: VERSION,
   },
   {capabilities: {logging: {}}},
 );
@@ -67,18 +55,36 @@ server.server.setRequestHandler(SetLevelRequestSchema, () => {
 
 let context: McpContext;
 async function getContext(): Promise<McpContext> {
-  const browser = await resolveBrowser({
-    browserUrl: args.browserUrl,
-    headless: args.headless,
-    executablePath: args.executablePath,
-    customDevTools: args.customDevtools,
-    channel: args.channel as Channel,
-    isolated: args.isolated,
-    logFile,
-  });
+  const extraArgs: string[] = (args.chromeArg ?? []).map(String);
+  if (args.proxyServer) {
+    extraArgs.push(`--proxy-server=${args.proxyServer}`);
+  }
+  const devtools = args.experimentalDevtools ?? false;
+  const browser =
+    args.browserUrl || args.wsEndpoint
+      ? await ensureBrowserConnected({
+          browserURL: args.browserUrl,
+          wsEndpoint: args.wsEndpoint,
+          wsHeaders: args.wsHeaders,
+          devtools,
+        })
+      : await ensureBrowserLaunched({
+          headless: args.headless,
+          executablePath: args.executablePath,
+          channel: args.channel as Channel,
+          isolated: args.isolated,
+          logFile,
+          viewport: args.viewport,
+          args: extraArgs,
+          acceptInsecureCerts: args.acceptInsecureCerts,
+          devtools,
+        });
+
   if (context?.browser !== browser) {
     context = await McpContext.from(browser, logger, {
       disableTimeouts: args.disableTimeouts,
+      experimentalDevToolsDebugging: devtools,
+      experimentalIncludeAllPages: args.experimentalIncludeAllPages,
     });
   }
   return context;
@@ -95,6 +101,24 @@ Avoid sharing sensitive or personal information that you do not want to share wi
 const toolMutex = new Mutex();
 
 function registerTool(tool: ToolDefinition): void {
+  if (
+    tool.annotations.category === ToolCategory.EMULATION &&
+    args.categoryEmulation === false
+  ) {
+    return;
+  }
+  if (
+    tool.annotations.category === ToolCategory.PERFORMANCE &&
+    args.categoryPerformance === false
+  ) {
+    return;
+  }
+  if (
+    tool.annotations.category === ToolCategory.NETWORK &&
+    args.categoryNetwork === false
+  ) {
+    return;
+  }
   server.registerTool(
     tool.name,
     {
@@ -107,6 +131,8 @@ function registerTool(tool: ToolDefinition): void {
       try {
         logger(`${tool.name} request: ${JSON.stringify(params, null, '  ')}`);
         const context = await getContext();
+        logger(`${tool.name} context: resolved`);
+        await context.detectOpenDevToolsWindows();
         const response = new McpResponse();
         await tool.handler(
           {
@@ -134,6 +160,9 @@ function registerTool(tool: ToolDefinition): void {
             isError: true,
           };
         }
+      } catch (err) {
+        logger(`${tool.name} error: ${err.message}`);
+        throw err;
       } finally {
         guard.dispose();
       }
@@ -151,9 +180,14 @@ const tools = [
   ...Object.values(screenshotTools),
   ...Object.values(scriptTools),
   ...Object.values(snapshotTools),
-];
+] as ToolDefinition[];
+
+tools.sort((a, b) => {
+  return a.name.localeCompare(b.name);
+});
+
 for (const tool of tools) {
-  registerTool(tool as unknown as ToolDefinition);
+  registerTool(tool);
 }
 
 const transport = new StdioServerTransport();
